@@ -5,7 +5,7 @@ A sleek, intuitive, and interactive AI chat assistant designed for seamless conv
 ![Screenshot](https://res.cloudinary.com/dpywncjnh/image/upload/v1752561532/Screenshotbg_fgjxui.png)
 
 **Live Demo:**  
-[https://interactive-ai.netlify.app/](https://interactive-ai.netlify.app/)
+[https://interact-ai.netlify.app/](https://interact-ai.netlify.app/)
 
 ---
 
