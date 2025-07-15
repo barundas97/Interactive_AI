@@ -1,33 +1,38 @@
-[# InterAct AI Assistant
+# InterAct AI Assistant
 
-A sleek, intuitive, and interactive AI chat assistant designed for seamless conversations and efficient chat management. InterAct AI Assistant leverages modern web technologies and advanced AI to deliver an engaging, user-friendly chat experience.
+A sleek, intuitive, and interactive AI chat assistant designed for seamless conversations and efficient chat management. InterAct AI Assistant leverages modern web technologies and advanced AI to deliver a powerful yet user-friendly chat experience.
+
+![Screenshot](https://res.cloudinary.com/dpywncjnh/image/upload/v1752561532/Screenshotbg_fgjxui.png)
+
+**Live Demo:**  
+[https://interactive-ai.netlify.app/](https://interactive-ai.netlify.app/)
 
 ---
 
 ## ✨ Features
 
-- **Intelligent AI Conversations:**  
+- **Intelligent AI Conversations**  
   Powered by the Gemini 2.0 Flash API, the assistant provides dynamic and insightful responses in real-time.
 
-- **Persistent Chat History:**  
+- **Persistent Chat History**  
   All conversations are automatically saved to your browser's local storage, so you can always revisit and resume past chats.
 
-- **Intuitive Sidebar Navigation:**  
+- **Intuitive Sidebar Navigation**  
   - **New Chat:** Instantly start a fresh conversation.
   - **Load Existing Chats:** Quickly switch between previous discussions.
   - **Delete Chats:** Effortlessly remove unwanted chat sessions.
   - **Collapsible Sidebar:** Toggle visibility to optimize your workspace.
 
-- **Fully Responsive Design:**  
+- **Fully Responsive Design**  
   Built with Tailwind CSS, ensuring a consistent and beautiful experience on desktops, tablets, and smartphones.
 
-- **Markdown Rendering:**  
+- **Markdown Rendering**  
   AI responses are elegantly formatted using Markdown for enhanced clarity and readability.
 
-- **Optimistic UI Updates:**  
+- **Optimistic UI Updates**  
   Messages appear instantly for a smooth, real-time feel—even while the AI is generating its reply.
 
-- **Robust Error Handling:**  
+- **Robust Error Handling**  
   Clear, informative notifications help you troubleshoot any API or storage issues.
 
 ---
@@ -48,10 +53,9 @@ Follow these steps to run InterAct AI Assistant locally:
 
 1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
-   cd interact-ai-assistant
+   git clone https://github.com/barundas97/Interactive_AI.git
+   cd Interactive_AI
    ```
-   Replace `<repository-url>` with this project's actual URL.
 
 2. **Install dependencies:**  
    Ensure you have Node.js and npm (or yarn) installed.
@@ -88,5 +92,10 @@ Follow these steps to run InterAct AI Assistant locally:
 
 ---
 
+## 📝 License
+
+This project is licensed under the MIT License.
+
+---
+
 Enjoy seamless, intelligent chats with InterAct AI Assistant!
-](https://res.cloudinary.com/dpywncjnh/image/upload/v1752561532/Screenshotbg_fgjxui.png)
