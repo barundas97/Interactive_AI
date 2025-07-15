@@ -1,4 +1,4 @@
-# InterAct AI Assistant
+[# InterAct AI Assistant
 
 A sleek, intuitive, and interactive AI chat assistant designed for seamless conversations and efficient chat management. InterAct AI Assistant leverages modern web technologies and advanced AI to deliver an engaging, user-friendly chat experience.
 
@@ -89,3 +89,4 @@ Follow these steps to run InterAct AI Assistant locally:
 ---
 
 Enjoy seamless, intelligent chats with InterAct AI Assistant!
+](https://res.cloudinary.com/dpywncjnh/image/upload/v1752561532/Screenshotbg_fgjxui.png)
