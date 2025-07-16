@@ -1,0 +1,6 @@
+[build]
+  functions = "netlify/functions"
+  publish = "dist" # Vite output folder
+
+[dev]
+  command = "vite"
