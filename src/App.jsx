@@ -1,284 +1,317 @@
-import { useState, useEffect, useRef } from 'react';
-import { marked } from 'marked';
+import React, { useState, useEffect, useRef } from 'react';
+// import './index.css'; // Removed: All styling is handled by Tailwind CSS directly within the component
 
-function App() {
-    const [prompt, setPrompt] = useState('');
-    const [chats, setChats] = useState([]);
-    const [currentChatId, setCurrentChatId] = useState(null);
-    const [currentChatMessages, setCurrentChatMessages] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-    const chatEndRef = useRef(null);
+// Main App component
+const App = () => {
+  // State to control the visibility of the sidebar
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // State for the current message being typed
+  const [message, setMessage] = useState('');
+  // State to store the history of all chats
+  const [chatHistory, setChatHistory] = useState([]);
+  // State to store messages of the currently selected chat
+  const [messages, setMessages] = useState([]);
+  // State to indicate if an AI response is being loaded
+  const [isLoading, setIsLoading] = useState(false);
+  // State for the search query in the sidebar
+  const [searchQuery, setSearchQuery] = useState('');
+  // Ref for the sidebar element, used to detect clicks outside the sidebar
+  const sidebarRef = useRef(null);
+  // Ref for the main content area, to prevent closing sidebar when clicking on main content
+  const mainContentRef = useRef(null);
 
-    const API_FUNCTION_URL = "/.netlify/functions/gemini";
+  // Helper function to determine if the current view is mobile (less than md breakpoint)
+  const isMobileView = () => window.innerWidth < 768;
 
-    useEffect(() => {
-        const storedChats = localStorage.getItem('gemini_chat_history');
-        const storedSidebarState = localStorage.getItem('gemini_sidebar_open');
-        const loadedChats = storedChats ? JSON.parse(storedChats) : [];
-        const loadedSidebarState = storedSidebarState ? JSON.parse(storedSidebarState) : false;
-
-        setChats(loadedChats);
-        setIsSidebarOpen(loadedSidebarState);
-
-        if (loadedChats.length > 0) {
-            const lastActiveChatId = localStorage.getItem('gemini_last_active_chat_id');
-            const initialChat = loadedChats.find(chat => chat.id === lastActiveChatId) || loadedChats[0];
-            setCurrentChatId(initialChat.id);
-        } else {
-            handleNewChat();
-        }
-    }, []);
-
-    useEffect(() => {
-        localStorage.setItem('gemini_chat_history', JSON.stringify(chats));
-    }, [chats]);
-
-    useEffect(() => {
-        if (currentChatId) {
-            localStorage.setItem('gemini_last_active_chat_id', currentChatId);
-        } else {
-            localStorage.removeItem('gemini_last_active_chat_id');
-        }
-    }, [currentChatId]);
-
-    useEffect(() => {
-        localStorage.setItem('gemini_sidebar_open', JSON.stringify(isSidebarOpen));
-    }, [isSidebarOpen]);
-
-    useEffect(() => {
-        const activeChat = chats.find(chat => chat.id === currentChatId);
-        setCurrentChatMessages(activeChat ? activeChat.messages || [] : []);
-    }, [currentChatId, chats]);
-
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [currentChatMessages]);
-
-    const handleNewChat = () => {
-        const newChatId = crypto.randomUUID();
-        const newChat = {
-            id: newChatId,
-            title: "New Chat",
-            messages: [],
-            createdAt: new Date().toISOString(),
-        };
-        setChats(prev => [...prev, newChat]);
-        setCurrentChatId(newChatId);
-        setCurrentChatMessages([]);
+  // Effect hook to handle clicks outside the sidebar to close it
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // If the sidebar is open and the click occurred outside the sidebar itself
+      // and also not on the main content area (to prevent accidental closing when interacting with chat)
+      if (isSidebarOpen &&
+          sidebarRef.current && !sidebarRef.current.contains(event.target) &&
+          mainContentRef.current && !mainContentRef.current.contains(event.target) &&
+          event.target.closest('.sidebar-toggle-button') === null // Exclude the toggle button itself
+      ) {
+        // Close the sidebar
+        setIsSidebarOpen(false);
+      }
     };
 
-    const handleLoadChat = (id) => {
-        setCurrentChatId(id);
+    // Add event listener when the component mounts
+    document.addEventListener('mousedown', handleClickOutside);
+
+    // Clean up the event listener when the component unmounts
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
     };
+  }, [isSidebarOpen]); // Dependency array: re-run effect if isSidebarOpen changes
 
-    const handleDeleteChat = (id) => {
-        const updatedChats = chats.filter(chat => chat.id !== id);
-        setChats(updatedChats);
-        if (currentChatId === id) {
-            if (updatedChats.length > 0) {
-                setCurrentChatId(updatedChats[0].id);
-            } else {
-                setCurrentChatId(null);
-                setCurrentChatMessages([]);
-                handleNewChat();
-            }
-        }
-    };
+  // Function to toggle sidebar visibility (used by the button on mobile)
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-    const handleSend = async () => {
-        if (!prompt.trim() || isLoading || !currentChatId) return;
-        setError(null);
+  // Function to start a new chat
+  const startNewChat = () => {
+    setMessages([]); // Clear current messages
+    const newChatId = Date.now();
+    // Add a default name for the new chat for search functionality
+    setChatHistory([...chatHistory, { id: newChatId, name: `New Chat ${chatHistory.length + 1}`, messages: [] }]);
+    // Immediately select the new chat
+    selectChat(newChatId);
+    // Close sidebar on mobile after starting a new chat
+    if (isMobileView()) {
+      setIsSidebarOpen(false);
+    }
+  };
 
-        const userMessage = { role: 'user', parts: [{ text: prompt }] };
-        const updatedMessages = [...currentChatMessages, userMessage];
-        setCurrentChatMessages(updatedMessages);
-        setPrompt('');
-        setIsLoading(true);
+  // Function to delete a chat from history
+  const deleteChat = (id) => {
+    setChatHistory(chatHistory.filter(chat => chat.id !== id));
+    // If the deleted chat was the currently active one, clear messages
+    if (messages.length > 0 && messages[0].chatId === id) {
+      setMessages([]);
+    }
+  };
 
-        setChats(prev =>
-            prev.map(chat => chat.id === currentChatId ? { ...chat, messages: updatedMessages } : chat)
-        );
+  // Function to select an existing chat
+  const selectChat = (id) => {
+    const chat = chatHistory.find(chat => chat.id === id);
+    setMessages(chat ? chat.messages : []);
+    // Close sidebar on mobile after selecting a chat
+    if (isMobileView()) {
+      setIsSidebarOpen(false);
+    }
+  };
 
-        try {
-            const currentChat = chats.find(c => c.id === currentChatId);
-            if (currentChat?.title === "New Chat" && currentChatMessages.length === 0) {
-                const newTitle = prompt.length > 30 ? prompt.substring(0, 30) + '...' : prompt;
-                setChats(prev => prev.map(chat =>
-                    chat.id === currentChatId ? { ...chat, title: newTitle } : chat
-                ));
-            }
+  // Function to send a message to the AI
+  const sendMessage = async () => {
+    if (!message.trim()) return; // Don't send empty messages
 
-            const response = await fetch(API_FUNCTION_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt, history: currentChatMessages }),
-            });
+    setIsLoading(true); // Set loading state
+    const currentChatId = chatHistory.length > 0 ? chatHistory[chatHistory.length - 1].id : Date.now();
+    const newMessage = { text: message, sender: 'user', chatId: currentChatId };
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Server error from Netlify function.');
-            }
+    // Update messages for the current chat immediately
+    setMessages((prevMessages) => [...prevMessages, newMessage]);
+    setMessage(''); // Clear input field
 
-            const data = await response.json();
-            let aiMessage = data.candidates?.[0]?.content || {
-                role: 'model',
-                parts: [{ text: "No response from Gemini." }],
+    try {
+      // API call to Gemini
+      // Using import.meta.env for environment variables, which is standard for Vite-based React apps
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+      const payload = {
+        contents: [{ parts: [{ text: newMessage.text }] }],
+      };
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      // Check for valid response structure
+      if (data.candidates && data.candidates.length > 0 &&
+          data.candidates[0].content && data.candidates[0].content.parts &&
+          data.candidates[0].content.parts.length > 0) {
+        const aiResponse = data.candidates[0].content.parts[0].text;
+        const aiMessage = { text: aiResponse, sender: 'ai', chatId: currentChatId };
+
+        // Update messages for the current chat with AI response
+        setMessages((prevMessages) => [...prevMessages, aiMessage]);
+
+        // Update chat history with both user and AI messages
+        setChatHistory((prevChatHistory) => {
+          const chatIndex = prevChatHistory.findIndex((chat) => chat.id === currentChatId);
+          if (chatIndex !== -1) {
+            // If chat exists, update its messages
+            const updatedChatHistory = [...prevChatHistory];
+            updatedChatHistory[chatIndex] = {
+              ...updatedChatHistory[chatIndex],
+              messages: [...updatedChatHistory[chatIndex].messages, newMessage, aiMessage],
             };
+            return updatedChatHistory;
+          } else {
+            // If it's a new chat (e.g., first message in a session), create it
+            return [...prevChatHistory, { id: currentChatId, name: `Chat ${prevChatHistory.length + 1}`, messages: [newMessage, aiMessage] }];
+          }
+        });
+      } else {
+        console.error('Unexpected API response structure:', data);
+        setMessages((prev) => [...prev, { text: 'Error: Unexpected AI response format.', sender: 'ai', chatId: currentChatId }]);
+      }
+    } catch (error) {
+      console.error('Error communicating with AI:', error);
+      setMessages((prev) => [...prev, { text: 'Error communicating with AI. Please try again.', sender: 'ai', chatId: currentChatId }]);
+    } finally {
+      setIsLoading(false); // End loading state
+    }
+  };
 
-            const finalMessages = [...updatedMessages, aiMessage];
-            setCurrentChatMessages(finalMessages);
-            setChats(prev => prev.map(chat =>
-                chat.id === currentChatId ? { ...chat, messages: finalMessages } : chat
-            ));
-        } catch (err) {
-            setError(err.message);
-            setCurrentChatMessages(currentChatMessages);
-            setChats(prev => prev.map(chat =>
-                chat.id === currentChatId ? { ...chat, messages: currentChatMessages } : chat
-            ));
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  // Filter chat history based on search query
+  const filteredChatHistory = chatHistory.filter(chat =>
+    chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-    const Message = ({ message }) => {
-        const isModel = message.role === 'model';
-        const rawHtml = isModel ? marked.parse(message.parts[0].text) : message.parts[0].text;
-        return (
-            <div className={`flex gap-4 my-4 ${isModel ? 'justify-start' : 'justify-end'}`}>
-                {isModel && <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">AI</div>}
-                <div className={`max-w-2xl p-4 rounded-2xl shadow-md ${isModel ? 'bg-gray-800 rounded-tl-none' : 'bg-blue-600 text-white rounded-br-none'}`}>
-                    {isModel ? (
-                        <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: rawHtml }} />
-                    ) : (
-                        <p>{rawHtml}</p>
-                    )}
-                </div>
-                {!isModel && <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center text-white font-bold">You</div>}
+  return (
+    <div className="flex h-screen bg-gray-900 text-white font-sans relative overflow-hidden">
+      {/* Overlay for mobile view when the sidebar is open */}
+      {isSidebarOpen && isMobileView() && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+          onClick={() => setIsSidebarOpen(false)} // Close sidebar on overlay click
+        ></div>
+      )}
+
+      {/* Sidebar Toggle Button (visible on desktop for hover, clickable on mobile) */}
+      <div
+        className={`
+          fixed top-1/2 left-0 transform -translate-y-1/2 z-30
+          transition-all duration-300 ease-in-out
+          ${isSidebarOpen ? 'md:left-[calc(16rem-1px)]' : 'md:left-0'}
+        `}
+        // On desktop, the button itself is part of the hoverable area
+        onMouseEnter={() => !isMobileView() && setIsSidebarOpen(true)}
+      >
+        <button
+          onClick={toggleSidebar}
+          className="sidebar-toggle-button p-2 bg-gray-800 rounded-r-lg hover:bg-gray-700 transition-colors shadow-lg"
+          title={isSidebarOpen ? "Close Sidebar" : "Open Sidebar"}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {isSidebarOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /> // Left arrow
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /> // Right arrow
+            )}
+          </svg>
+        </button>
+      </div>
+
+      {/* Sidebar */}
+      <div
+        ref={sidebarRef}
+        className={`
+          fixed top-0 left-0 h-full bg-gray-800 transition-all duration-300 ease-in-out z-20
+          ${isSidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full'}
+          md:w-64 md:${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          overflow-hidden
+        `}
+        // On desktop, the entire sidebar area triggers hover close
+        onMouseLeave={() => !isMobileView() && setIsSidebarOpen(false)}
+      >
+        {/* Only show content if sidebar is logically open to prevent rendering issues when width is 0 */}
+        {isSidebarOpen && (
+          <div className="flex flex-col h-full p-4">
+            {/* Search Bar in Sidebar Header */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold mb-4 text-white">Chats</h2>
+              <input
+                type="text"
+                placeholder="Search chats..."
+                className="w-full p-2 rounded-md bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
-        );
-    };
 
-    return (
-        <div className="flex h-screen bg-gray-900 text-gray-100 font-sans overflow-hidden">
-
-            {/* Desktop Sidebar Hover Tab */}
-            <div
-                className="hidden md:block fixed top-1/2 left-0 z-30 bg-gray-700 text-white px-2 py-1 rounded-r-lg cursor-pointer hover:bg-indigo-600"
-                onMouseEnter={() => setIsSidebarHovered(true)}
+            {/* New Chat Button */}
+            <button
+              onClick={startNewChat}
+              className="w-full py-2 px-4 flex items-center justify-center bg-gradient-to-r from-cyan-500 to-purple-500 rounded-md hover:from-cyan-600 hover:to-purple-600 transition-colors mb-4 shadow-md"
+              title="Start New Chat"
             >
-                ▶
+              {/* Plus Icon for New Chat Button */}
+              <svg className="w-5 h-5 flex-shrink-0 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+              </svg>
+              <span className="truncate">New Chat</span>
+            </button>
+
+            {/* Chat History List */}
+            <div className="flex-grow overflow-y-auto custom-scrollbar">
+              <ul className="space-y-2">
+                {filteredChatHistory.map((chat) => (
+                  <li key={chat.id} className="flex items-center p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors">
+                    <button
+                      onClick={() => selectChat(chat.id)}
+                      className="flex items-center flex-1 text-left truncate focus:outline-none"
+                      title={chat.name}
+                    >
+                      <svg className="w-5 h-5 flex-shrink-0 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5v-4a2 2 0 012-2h10a2 2 0 012 2v4h-4m-6 0h6" />
+                      </svg>
+                      <span className="truncate">{chat.name}</span>
+                    </button>
+                    <button
+                      onClick={() => deleteChat(chat.id)}
+                      className="text-red-400 hover:text-red-600 transition-colors flex-shrink-0 ml-2 p-1 rounded-full hover:bg-gray-500"
+                      title="Delete Chat"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
+          </div>
+        )}
+      </div>
 
-            {/* Sidebar */}
-            <aside
-                className={`fixed z-40 top-0 left-0 h-full bg-gray-800 border-r border-gray-700 shadow-xl transition-all duration-300 ease-in-out 
-                    ${isSidebarHovered || isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} 
-                    ${isSidebarOpen ? 'block md:hidden' : 'hidden md:block'}`}
-                onMouseLeave={() => setIsSidebarHovered(false)}
-            >
-                {/* Mobile close button */}
-                <div className="md:hidden flex justify-end p-2">
-                    <button onClick={() => setIsSidebarOpen(false)} className="text-white text-2xl">×</button>
-                </div>
-
-                <h2 className="text-2xl font-bold mb-4 text-center bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">Chat History</h2>
-                <button onClick={handleNewChat} className="w-full bg-indigo-600 py-2 rounded-lg mb-4">New Chat</button>
-                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                    {chats.map(chat => (
-                        <div key={chat.id}
-                            className={`p-3 rounded-lg mb-2 cursor-pointer ${currentChatId === chat.id ? 'bg-indigo-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-                            onClick={() => handleLoadChat(chat.id)}>
-                            <div className="flex justify-between">
-                                <span className="truncate">{chat.title}</span>
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id); }} className="text-sm text-red-300 hover:text-white">×</button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </aside>
-
-            {/* Main Chat */}
-            <div className="flex flex-col flex-1 max-w-4xl mx-auto p-4">
-                <header className="flex items-center justify-between mb-6">
-                    {/* Mobile hamburger */}
-                    <div className="md:hidden">
-                        <button onClick={() => setIsSidebarOpen(true)} className="text-2xl">☰</button>
-                    </div>
-                    <div className="flex-1 text-center">
-                        <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 text-transparent bg-clip-text">InterAct AI Assistant</h1>
-                        <p className="text-gray-400">Powered by Gemini</p>
-                    </div>
-                    <div className="w-10"></div>
-                </header>
-
-                <main className="flex-1 overflow-y-auto p-4 bg-gray-800/50 rounded-lg border border-gray-700/50 custom-scrollbar">
-                    {currentChatMessages.map((msg, index) => (
-                        <Message key={index} message={msg} />
-                    ))}
-                    {isLoading && (
-                        <div className="flex gap-4 my-4">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">AI</div>
-                            <div className="max-w-2xl p-4 bg-gray-800 rounded-2xl flex items-center gap-2">
-                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
-                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-300"></div>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={chatEndRef}></div>
-                </main>
-
-                {error && (
-                    <div className="mt-4 p-3 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg text-center">
-                        <strong>Error:</strong> {error}
-                    </div>
-                )}
-
-                <footer className="mt-4">
-                    <div className="flex items-center bg-gray-800 border border-gray-700 rounded-full p-2">
-                        <input
-                            type="text"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Ask me anything..."
-                            className="flex-1 bg-transparent px-4 py-2 outline-none text-white"
-                        />
-                        <button
-                            onClick={handleSend}
-                            disabled={!prompt.trim() || isLoading}
-                            className="p-3 rounded-full bg-indigo-600 text-white hover:bg-indigo-500"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                            </svg>
-                        </button>
-                    </div>
-                </footer>
-            </div>
-
-            <style>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 8px;
-                    height: 8px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: #374151;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #4B5563;
-                    border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: #6B7280;
-                }
-            `}</style>
+      {/* Main Content Area */}
+      <div
+        ref={mainContentRef}
+        className={`
+          flex-1 flex flex-col items-center p-4
+          transition-all duration-300 ease-in-out
+          ${isSidebarOpen ? 'md:ml-64' : 'md:ml-0'}
+          overflow-hidden
+        `}
+      >
+        <div className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 text-transparent bg-clip-text mb-8">
+          InterAct AI
         </div>
-    );
-}
+        <div className="w-full max-w-2xl h-[70vh] bg-gray-800 rounded-lg overflow-y-auto p-4 flex flex-col-reverse custom-scrollbar">
+          {isLoading && <div className="text-center text-gray-400 p-2">Loading...</div>}
+          {messages.slice().reverse().map((msg, index) => ( // Reverse to show latest at bottom
+            <div key={index} className={`mb-4 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
+              <span className={`inline-block p-3 rounded-lg max-w-[80%] ${msg.sender === 'user' ? 'bg-cyan-500' : 'bg-purple-500'}`}>
+                {msg.text}
+              </span>
+            </div>
+          ))}
+          {messages.length === 0 && !isLoading && (
+            <div className="text-center text-gray-500 mt-auto">Start a new chat or select an existing one!</div>
+          )}
+        </div>
+        <div className="w-full max-w-2xl mt-4 flex">
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            className="flex-1 p-3 bg-gray-700 rounded-l-lg focus:outline-none placeholder-gray-400"
+            placeholder="Type your message..."
+            disabled={isLoading}
+          />
+          <button
+            onClick={sendMessage}
+            className="p-3 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-r-lg hover:from-cyan-600 hover:to-purple-600 transition-colors shadow-md flex items-center justify-center"
+            title="Send Message"
+            disabled={isLoading || !message.trim()}
+          >
+            {/* Gemini Logo Icon for Send Button */}
+           <span class="material-symbols-outlined">send</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default App;
